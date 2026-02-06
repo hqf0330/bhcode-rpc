@@ -1,5 +1,9 @@
-package com.bhcode.rpc;
+package com.bhcode.rpc.consumer;
 
+import com.bhcode.rpc.codec.BHDecoder;
+import com.bhcode.rpc.codec.RequestEncoder;
+import com.bhcode.rpc.message.Request;
+import com.bhcode.rpc.message.Response;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -8,9 +12,6 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.LineBasedFrameDecoder;
-import io.netty.handler.codec.string.StringDecoder;
-import io.netty.handler.codec.string.StringEncoder;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -29,22 +30,27 @@ public class Consumer {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline()
-                                .addLast(new LineBasedFrameDecoder(1024))
-                                .addLast(new StringDecoder())
-                                .addLast(new StringEncoder())
-                                .addLast(new SimpleChannelInboundHandler<String>() {
+                                .addLast(new BHDecoder())
+                                .addLast(new RequestEncoder())
+                                .addLast(new SimpleChannelInboundHandler<Response>() {
                                     @Override
-                                    protected void channelRead0(ChannelHandlerContext channelHandlerContext, String s) throws Exception {
-                                        int result = Integer.parseInt(s);
+                                    protected void channelRead0(ChannelHandlerContext channelHandlerContext,
+                                                                Response response) throws Exception {
+                                        System.out.println(response);
+                                        Integer result = Integer.valueOf(response.getResult().toString());
                                         addResultFuture.complete(result);
-                                        channelHandlerContext.close();
                                     }
                                 });
                     }
                 });
 
         ChannelFuture channelFuture = bootStrap.connect("127.0.0.1", 8888).sync();
-        channelFuture.channel().writeAndFlush("add," + a + "," + b + "\n");
+        Request request = new Request();
+        request.setMethodName("aaa");
+        request.setParams(new Object[]{1, 2});
+        request.setParamTypes(new String[]{"int", "int"});
+        request.setServiceName("test");
+        channelFuture.channel().writeAndFlush(request);
         return addResultFuture.get();
     }
 }
