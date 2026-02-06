@@ -1,0 +1,11 @@
+package com.bhcode.rpc;
+
+/**
+ * @author hqf0330@gmail.com
+ */
+public class Main {
+    public static void main(String[] args) throws Exception {
+        Consumer consumer = new Consumer();
+        System.out.println(consumer.add(1, 2));
+    }
+}
