@@ -12,10 +12,12 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * @author hqf0330@gmail.com
  */
+@Slf4j
 public class ProviderServer {
 
     private final int port;
@@ -50,21 +52,7 @@ public class ProviderServer {
                             ch.pipeline()
                                     .addLast(new BHDecoder())
                                     .addLast(new ResponseEncoder())
-                                    .addLast(new SimpleChannelInboundHandler<Request>() {
-                                        @Override
-                                        protected void channelRead0(ChannelHandlerContext ctx, Request request) throws Exception {
-                                            System.out.println(request);
-                                            ProviderRegistry.Invocation<?> service =
-                                                    registry.findService(request.getServiceName());
-
-                                            Object result = service.invoke(request.getMethodName(),
-                                                    request.getParamTypes(),
-                                                    request.getParams());
-                                            Response response = new Response();
-                                            response.setResult(result);
-                                            ctx.writeAndFlush(response);
-                                        }
-                                    });
+                                    .addLast(new ProviderHandler());
 
                         }
                     })
@@ -73,6 +61,44 @@ public class ProviderServer {
             serverBootstrap.bind(port).sync();
         } catch (Exception e) {
             throw new RuntimeException("ProviderServer Start Failed!", e);
+        }
+    }
+
+    public class ProviderHandler extends SimpleChannelInboundHandler<Request> {
+
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, Request request) throws Exception {
+            ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
+            if (invocation == null) {
+                Response failResp = Response.fail(String.format("Service %s not found!", request.getServiceName()));
+                ctx.writeAndFlush(failResp);
+                return;
+            }
+            try {
+                Object result = invocation.invoke(request.getMethodName(), request.getParamTypes(),
+                        request.getParams());
+                log.info("serviceName: {}, method: {}, result: {}", request.getServiceName(), request.getMethodName(), result);
+                ctx.writeAndFlush(Response.success(result));
+            } catch (Exception e) {
+                Response failResp = Response.fail(e.getMessage());
+                ctx.writeAndFlush(failResp);
+            }
+        }
+
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            log.info("address: {} connected", ctx.channel().remoteAddress());
+        }
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            log.info("address: {} disconnected", ctx.channel().remoteAddress());
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+            log.error("Exception caught", cause);
+            ctx.channel().close();
         }
     }
 

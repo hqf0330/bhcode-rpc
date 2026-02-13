@@ -3,6 +3,7 @@ package com.bhcode.rpc.consumer;
 import com.bhcode.rpc.api.Add;
 import com.bhcode.rpc.codec.BHDecoder;
 import com.bhcode.rpc.codec.RequestEncoder;
+import com.bhcode.rpc.exception.RpcException;
 import com.bhcode.rpc.message.Request;
 import com.bhcode.rpc.message.Response;
 import io.netty.bootstrap.Bootstrap;
@@ -15,6 +16,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author hqf0330@gmail.com
@@ -40,8 +42,12 @@ public class Consumer implements Add {
                                     .addLast(new SimpleChannelInboundHandler<Response>() {
                                         @Override
                                         protected void channelRead0(ChannelHandlerContext channelHandlerContext,
-                                                                    Response response) throws Exception {
-                                            addResultFuture.complete(Integer.valueOf(response.getResult().toString()));
+                                                                    Response response) {
+                                            if (response.getCode() == 200) {
+                                                addResultFuture.complete(Integer.valueOf(response.getResult().toString()));
+                                            } else {
+                                                addResultFuture.completeExceptionally(new RpcException(response.getErrorMessage()));
+                                            }
                                         }
                                     });
                         }
@@ -54,7 +60,7 @@ public class Consumer implements Add {
             request.setParamTypes(new Class[]{int.class, int.class});
             request.setServiceName(Add.class.getName());
             channelFuture.channel().writeAndFlush(request);
-            return addResultFuture.get();
+            return addResultFuture.get(3, TimeUnit.SECONDS);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
