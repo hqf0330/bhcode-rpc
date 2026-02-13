@@ -70,7 +70,7 @@ public class ProviderServer {
         protected void channelRead0(ChannelHandlerContext ctx, Request request) throws Exception {
             ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
             if (invocation == null) {
-                Response failResp = Response.fail(String.format("Service %s not found!", request.getServiceName()));
+                Response failResp = Response.fail(request.getRequestId(), String.format("Service %s not found!", request.getServiceName()));
                 ctx.writeAndFlush(failResp);
                 return;
             }
@@ -78,9 +78,9 @@ public class ProviderServer {
                 Object result = invocation.invoke(request.getMethodName(), request.getParamTypes(),
                         request.getParams());
                 log.info("serviceName: {}, method: {}, result: {}", request.getServiceName(), request.getMethodName(), result);
-                ctx.writeAndFlush(Response.success(result));
+                ctx.writeAndFlush(Response.success(request.getRequestId(), result));
             } catch (Exception e) {
-                Response failResp = Response.fail(e.getMessage());
+                Response failResp = Response.fail(request.getRequestId(), e.getMessage());
                 ctx.writeAndFlush(failResp);
             }
         }
