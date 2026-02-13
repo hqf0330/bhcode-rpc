@@ -1,6 +1,7 @@
 package com.bhcode.rpc.codec;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONReader;
 import com.bhcode.rpc.message.Message;
 import com.bhcode.rpc.message.Request;
 import com.bhcode.rpc.message.Response;
@@ -45,7 +46,7 @@ public class BHDecoder extends LengthFieldBasedFrameDecoder {
     }
 
     private Request deserializeRequest(byte[] body) {
-        return JSONObject.parseObject(new String(body, StandardCharsets.UTF_8), Request.class);
+        return JSONObject.parseObject(new String(body, StandardCharsets.UTF_8), Request.class, JSONReader.Feature.SupportClassForName);
     }
 
     private Response deserializeResponse(byte[] body) {

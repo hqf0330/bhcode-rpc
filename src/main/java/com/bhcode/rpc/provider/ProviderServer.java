@@ -1,7 +1,6 @@
 package com.bhcode.rpc.provider;
 
 import com.bhcode.rpc.codec.BHDecoder;
-import com.bhcode.rpc.codec.RequestEncoder;
 import com.bhcode.rpc.codec.ResponseEncoder;
 import com.bhcode.rpc.message.Request;
 import com.bhcode.rpc.message.Response;
@@ -25,8 +24,15 @@ public class ProviderServer {
 
     private EventLoopGroup workerEventLoopGroup;
 
+    private final ProviderRegistry registry;
+
     public ProviderServer(int port) {
         this.port = port;
+        this.registry = new ProviderRegistry();
+    }
+
+    public <I> void register(Class<I> interfaceClass, I serviceInstance) {
+        registry.register(interfaceClass, serviceInstance);
     }
 
     public void start() {
@@ -40,7 +46,7 @@ public class ProviderServer {
                     .channel(NioServerSocketChannel.class)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
+                        protected void initChannel(SocketChannel ch) {
                             ch.pipeline()
                                     .addLast(new BHDecoder())
                                     .addLast(new ResponseEncoder())
@@ -48,8 +54,14 @@ public class ProviderServer {
                                         @Override
                                         protected void channelRead0(ChannelHandlerContext ctx, Request request) throws Exception {
                                             System.out.println(request);
+                                            ProviderRegistry.Invocation<?> service =
+                                                    registry.findService(request.getServiceName());
+
+                                            Object result = service.invoke(request.getMethodName(),
+                                                    request.getParamTypes(),
+                                                    request.getParams());
                                             Response response = new Response();
-                                            response.setResult(1);
+                                            response.setResult(result);
                                             ctx.writeAndFlush(response);
                                         }
                                     });
@@ -72,9 +84,5 @@ public class ProviderServer {
         if (workerEventLoopGroup != null) {
             workerEventLoopGroup.shutdownGracefully();
         }
-    }
-
-    private static int add(int a, int b) {
-        return a + b;
     }
 }

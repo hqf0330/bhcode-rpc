@@ -1,5 +1,6 @@
 package com.bhcode.rpc.consumer;
 
+import com.bhcode.rpc.api.Add;
 import com.bhcode.rpc.codec.BHDecoder;
 import com.bhcode.rpc.codec.RequestEncoder;
 import com.bhcode.rpc.message.Request;
@@ -18,39 +19,44 @@ import java.util.concurrent.CompletableFuture;
 /**
  * @author hqf0330@gmail.com
  */
-public class Consumer {
-    public int add(int a, int b) throws Exception {
+public class Consumer implements Add {
 
-        CompletableFuture<Integer> addResultFuture = new CompletableFuture<>();
+    @Override
+    public int add(int a, int b) {
 
-        Bootstrap bootStrap = new Bootstrap()
-                .group(new NioEventLoopGroup())
-                .channel(NioSocketChannel.class)
-                .handler(new ChannelInitializer<SocketChannel>() {
-                    @Override
-                    protected void initChannel(SocketChannel ch) throws Exception {
-                        ch.pipeline()
-                                .addLast(new BHDecoder())
-                                .addLast(new RequestEncoder())
-                                .addLast(new SimpleChannelInboundHandler<Response>() {
-                                    @Override
-                                    protected void channelRead0(ChannelHandlerContext channelHandlerContext,
-                                                                Response response) throws Exception {
-                                        System.out.println(response);
-                                        Integer result = Integer.valueOf(response.getResult().toString());
-                                        addResultFuture.complete(result);
-                                    }
-                                });
-                    }
-                });
+        try {
 
-        ChannelFuture channelFuture = bootStrap.connect("127.0.0.1", 8888).sync();
-        Request request = new Request();
-        request.setMethodName("aaa");
-        request.setParams(new Object[]{1, 2});
-        request.setParamTypes(new String[]{"int", "int"});
-        request.setServiceName("test");
-        channelFuture.channel().writeAndFlush(request);
-        return addResultFuture.get();
+            CompletableFuture<Integer> addResultFuture = new CompletableFuture<>();
+
+            Bootstrap bootStrap = new Bootstrap()
+                    .group(new NioEventLoopGroup())
+                    .channel(NioSocketChannel.class)
+                    .handler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) throws Exception {
+                            ch.pipeline()
+                                    .addLast(new BHDecoder())
+                                    .addLast(new RequestEncoder())
+                                    .addLast(new SimpleChannelInboundHandler<Response>() {
+                                        @Override
+                                        protected void channelRead0(ChannelHandlerContext channelHandlerContext,
+                                                                    Response response) throws Exception {
+                                            addResultFuture.complete(Integer.valueOf(response.getResult().toString()));
+                                        }
+                                    });
+                        }
+                    });
+
+            ChannelFuture channelFuture = bootStrap.connect("127.0.0.1", 8888).sync();
+            Request request = new Request();
+            request.setMethodName("add");
+            request.setParams(new Object[]{a, b});
+            request.setParamTypes(new Class[]{int.class, int.class});
+            request.setServiceName(Add.class.getName());
+            channelFuture.channel().writeAndFlush(request);
+            return addResultFuture.get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }
