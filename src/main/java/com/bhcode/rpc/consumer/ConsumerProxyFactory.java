@@ -1,6 +1,5 @@
 package com.bhcode.rpc.consumer;
 
-import com.bhcode.rpc.api.Add;
 import com.bhcode.rpc.codec.BHDecoder;
 import com.bhcode.rpc.codec.RequestEncoder;
 import com.bhcode.rpc.exception.RpcException;
@@ -16,6 +15,9 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  * @author hqf0330@gmail.com
  */
 @Slf4j
-public class Consumer implements Add {
+public class ConsumerProxyFactory {
 
     private final Map<Integer, CompletableFuture<?>> inFlightMap = new ConcurrentHashMap<>();
 
@@ -59,39 +61,51 @@ public class Consumer implements Add {
                 });
     }
 
-    @Override
-    public int add(int a, int b) {
+    public <I> I createConsumerProxy(Class<I> interfaceClass) {
 
-        try {
+        return (I) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class[]{interfaceClass},
+                (proxy, method, args) -> {
+                    if (method.getDeclaringClass() == Object.class) {
+                        if (method.getName().equals("equals")) {
+                            return proxy == args[0];
+                        }
+                        if (method.getName().equals("toString")) {
+                            return "BHCode Proxy Consumer " + interfaceClass.getName();
+                        }
+                        if (method.getName().equals("hashCode")) {
+                            return System.identityHashCode(proxy);
+                        }
+                    }
+                    try {
+                        CompletableFuture<Response> responseFuture = new CompletableFuture<>();
 
-            CompletableFuture<Response> responseFuture = new CompletableFuture<>();
+                        Channel channel = connectionManager.getChannel("127.0.0.1", 8888);
+                        if (channel == null) {
+                            throw new RpcException("channel is null");
+                        }
 
-            Channel channel = connectionManager.getChannel("127.0.0.1", 8888);
-            if (channel == null) {
-                throw new RpcException("channel is null");
-            }
+                        Request request = new Request();
+                        request.setMethodName(method.getName());
+                        request.setParams(args);
+                        request.setParamTypes(method.getParameterTypes());
+                        request.setServiceName(interfaceClass.getName());
+                        inFlightMap.put(request.getRequestId(), responseFuture);
+                        channel.writeAndFlush(request).addListener(f -> {
+                            if (!f.isSuccess()) {
+                                inFlightMap.remove(request.getRequestId(), responseFuture);
+                            }
+                        });
+                        Response response = responseFuture.get(3, TimeUnit.SECONDS);
 
-            Request request = new Request();
-            request.setMethodName("add");
-            request.setParams(new Object[]{a, b});
-            request.setParamTypes(new Class[]{int.class, int.class});
-            request.setServiceName(Add.class.getName());
-            channel.writeAndFlush(request).addListener(f -> {
-                if (f.isSuccess()) {
-                    inFlightMap.put(request.getRequestId(), responseFuture);
-                }
-            });
-            Response response = responseFuture.get(3, TimeUnit.SECONDS);
-
-            if (response.getCode() == 200) {
-                return (Integer) response.getResult();
-            } else {
-                throw new RpcException(response.getErrorMessage());
-            }
-        } catch (RpcException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+                        if (response.getCode() == 200) {
+                            return response.getResult();
+                        }
+                        throw new RpcException(response.getErrorMessage());
+                    } catch (RpcException e) {
+                        throw e;
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
     }
 }

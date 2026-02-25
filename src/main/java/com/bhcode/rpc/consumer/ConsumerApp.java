@@ -7,7 +7,8 @@ import com.bhcode.rpc.api.Add;
  */
 public class ConsumerApp {
     public static void main(String[] args) throws Exception {
-        Add consumer = new Consumer();
+        ConsumerProxyFactory consumerProxyFactory = new ConsumerProxyFactory();
+        Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
         System.out.println(consumer.add(1, 2));
         System.out.println(consumer.add(3, 4));
     }
